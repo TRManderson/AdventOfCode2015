@@ -1,5 +1,5 @@
 #! /usr/bin/env stack
--- stack runghc
+-- stack runghc --package parsec
 import Data.Array.MArray
 import Data.Ix (range)
 import Data.Array.IO (IOArray)
@@ -30,21 +30,23 @@ getFn xs
 tuplify :: [a] -> (a,a)
 tuplify [x,y] = (x,y)
 
-how2parse :: Parser (IOArray (Int,Int) Bool -> IO ())
-how2parse = do
-    fnName <- choice [string "turn off", string "turn on", string "toggle"]
+how2parse :: Parser ([IOArray (Int,Int) Bool -> IO ()])
+how2parse = many1 $ do
+    fnName <- (choice [try (string "toggle"),  try (string "turn off"), try (string "turn on"), fail "Well I guess it fucked up?"])
     char ' '
     pair1 <- sepBy1 ((read :: String -> Int) <$> many1 digit) (char ',')
     string " through "
     pair2 <- sepBy1 ((read :: String -> Int) <$> many1 digit) (char ',')
+    optional $ char '\n'
     return $ (getFn fnName) (tuplify pair1) (tuplify pair2)
 
-modifier :: String -> IOArray (Int, Int) Bool -> IO ()
-modifier s = either (error . show) id . (parse how2parse s) $ s
+modifier :: String -> String -> [IOArray (Int, Int) Bool -> IO ()]
+modifier name s = either (error . show) id . (parse how2parse name) $ s
 
 main :: IO ()
 main = do
-  contents <- readFile =<< getLine
+  filename <- getLine
+  contents <- readFile filename
   a <- newArray ((0, 0), (999, 999)) False
-  mapM_ (($ a) . modifier) . lines $ contents
+  mapM_ ($ a) . modifier filename $ contents
   countLit a >>= print
